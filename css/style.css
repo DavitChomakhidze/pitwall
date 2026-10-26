@@ -279,6 +279,31 @@ body.race { height: 100vh; overflow: hidden; display: flex; flex-direction: colu
 .ob-stats div { padding: 6px 10px; font-size: 11px; color: var(--muted); }
 .ob-stats b { display: block; font: 700 17px var(--display); color: var(--text); font-variant-numeric: tabular-nums; }
 
+.ob-tabs { align-items: center; }
+.ob-src { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ob-note-full { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; gap: 8px; padding: 18px; background: #0d1017; }
+.ob-note-full p { margin: 0; font-size: 13px; }
+.ob-note-full .sub { font-size: 12px; color: var(--muted); }
+.ob-note-full code { background: var(--panel-2); padding: 1px 5px; border-radius: 4px; }
+.ob-link-btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; font-size: 12px; }
+.ob-body .ob-link-btn { position: absolute; right: 6px; top: 6px; font-size: 11px; padding: 2px 7px; background: #000a; }
+.ob-note-full .ob-link-btn { position: static; font-size: 12px; padding: 5px 10px; background: var(--panel-2); }
+.yt-open { background: #ff0033; color: #fff; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12.5px; }
+
+/* ---------- live broadcast ---------- */
+.tv-btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; font: 700 13px var(--display); letter-spacing: .06em; }
+.tv-btn.live { background: var(--accent); border-color: var(--accent); color: #fff; animation: pulse 1.6s infinite; }
+.tv-btn.upcoming { color: #ffd23f; }
+.tv-btn.off { color: var(--muted); font-weight: 500; }
+.tvwin { width: 480px; }
+.tvwin .ob-head { gap: 6px; }
+.tvwin select { flex: 1; min-width: 0; background: transparent; color: var(--text); border: 0; font: 600 12px var(--body); }
+.tvwin select option { background: var(--panel); }
+.tvwin #tvYt { color: var(--muted); font-size: 14px; padding: 0 4px; }
+.tv-pill { font: 700 11px var(--display); letter-spacing: .08em; padding: 2px 6px; border-radius: 3px; background: #2b3242; color: var(--text); white-space: nowrap; }
+.tv-pill.live { background: var(--accent); color: #fff; }
+.tv-pill.upcoming { background: #3a3110; color: #ffd23f; }
+
 /* ---------- action popups ---------- */
 .toasts { position: absolute; right: 14px; bottom: 14px; display: flex; flex-direction: column-reverse; gap: 8px; z-index: 18; width: 300px; }
 .toast {
@@ -302,5 +327,6 @@ body.race { height: 100vh; overflow: hidden; display: flex; flex-direction: colu
   .map-wrap { height: 60vh; order: -1; }
   .tower { max-height: 60vh; border-right: 0; border-top: 1px solid var(--line); }
   .onboard { width: calc(100% - 24px); left: 12px !important; top: 12px !important; }
+  .onboard.tvwin { top: auto !important; bottom: 12px; }
   .toasts { width: calc(100% - 28px); }
 }

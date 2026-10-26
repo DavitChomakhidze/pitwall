@@ -7,6 +7,7 @@ import { LiveRace } from './live.js';
 import { cornerText, nextCorner } from './corners.js';
 import { TrackWeather } from './weather.js';
 import { loadStandings } from './standings.js';
+import { findStreams, embedUrl, watchUrl, statusText } from './streams.js';
 import { cornerAt } from './tracks.js';
 
 let weather = null;
@@ -598,16 +599,154 @@ function toast(e) {
   }
 }
 
+// ---------------------------------------------------------------- floating windows
+
+/** Let a floating window be dragged around the map by its header. */
+function draggable(el, head) {
+  head.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('button, select, a')) return;
+    const r = el.getBoundingClientRect(), wrap = $('mapWrap').getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    head.setPointerCapture(e.pointerId);
+    const move = (m) => {
+      el.style.left = `${Math.max(0, Math.min(wrap.width - r.width, m.clientX - wrap.left - dx))}px`;
+      el.style.top = `${Math.max(0, Math.min(wrap.height - 40, m.clientY - wrap.top - dy))}px`;
+    };
+    head.addEventListener('pointermove', move);
+    head.addEventListener('pointerup', () => head.removeEventListener('pointermove', move), { once: true });
+  });
+}
+
+/** Put a player in `body`, reusing the current one if it already shows `src` (no restart). */
+function player(body, src, { video = false } = {}) {
+  const cur = body.querySelector('iframe, video');
+  if (cur && cur.dataset.src === src) return cur;
+  body.replaceChildren();
+  const node = video
+    ? Object.assign(document.createElement('video'), { src, autoplay: true, muted: true, controls: true })
+    : Object.assign(document.createElement('iframe'), { src, allow: 'autoplay; fullscreen; picture-in-picture; encrypted-media', allowFullscreen: true });
+  node.dataset.src = src;
+  body.append(node);
+  return node;
+}
+
+function notEmbeddable(body, v, text) {
+  body.replaceChildren();
+  const d = document.createElement('div');
+  d.className = 'ob-note-full';
+  d.innerHTML = `<p>${esc(text)}</p><a class="yt-open" href="${watchUrl(v.id)}" target="_blank" rel="noopener">Open on YouTube ↗</a>`;
+  body.append(d);
+}
+
+// ---------------------------------------------------------------- live broadcast (TV window)
+
+let streams = null; // { server, sessions, broadcast, onboards }
+let tv = null; // { el, video }
+let tvDismissed = false;
+
+async function refreshStreams() {
+  try { streams = await findStreams(series, ev); } catch { streams = null; }
+  drawTvButton();
+  // a broadcast went live while the page was open
+  if (streams?.broadcast?.status === 'live' && !tv && !tvDismissed) {
+    openTv(streams.broadcast);
+    toast({ kind: 'lead', title: 'Live broadcast', text: streams.broadcast.title });
+  }
+  if (tv) fillTvSessions();
+  if (ob?.tab === 'live') setObTab('live');
+}
+
+function drawTvButton() {
+  const b = $('tvBtn');
+  if (!streams) { b.hidden = true; return; }
+  if (!streams.server) {
+    b.hidden = false;
+    b.className = 'tv-btn off';
+    b.textContent = '📺 Broadcasts off';
+    b.title = 'Start the site with "npm start" (node server.js) to find live broadcasts and onboards';
+    return;
+  }
+  const v = streams.broadcast;
+  b.hidden = !v;
+  if (!v) return;
+  b.className = `tv-btn ${v.status}`;
+  b.textContent = v.status === 'live' ? '📺 LIVE' : v.status === 'upcoming' ? `📺 ${statusText(v)}` : '📺 Replay';
+  b.title = v.title;
+}
+
+$('tvBtn').onclick = () => {
+  if (!streams?.server) return;
+  if (tv) { closeTv(); return; }
+  tvDismissed = false;
+  openTv(streams.broadcast);
+};
+
+function openTv(v) {
+  if (!v) return;
+  if (!tv) {
+    const el = document.createElement('div');
+    el.className = 'onboard tvwin';
+    el.innerHTML = `
+      <div class="ob-head">
+        <span class="tv-pill" id="tvStatus"></span>
+        <select id="tvSel" title="Sessions"></select>
+        <a id="tvYt" target="_blank" rel="noopener" title="Open on YouTube">↗</a>
+        <button id="tvClose" title="Close">✕</button>
+      </div>
+      <div class="ob-body" id="tvBody"></div>`;
+    $('mapWrap').append(el);
+    const wrap = $('mapWrap').getBoundingClientRect();
+    el.style.left = `${Math.max(0, wrap.width - 500)}px`;
+    el.style.top = '48px';
+    tv = { el, video: null };
+    draggable(el, el.querySelector('.ob-head'));
+    el.querySelector('#tvClose').onclick = () => { tvDismissed = true; closeTv(); };
+    el.querySelector('#tvSel').onchange = (e) => showTv(streams.sessions.find((s) => s.id === e.target.value));
+  }
+  showTv(v);
+}
+
+function showTv(v) {
+  tv.video = v;
+  fillTvSessions();
+  const pill = tv.el.querySelector('#tvStatus');
+  pill.textContent = v.status === 'live' ? 'LIVE' : v.status === 'upcoming' ? statusText(v) : 'REPLAY';
+  pill.className = `tv-pill ${v.status}`;
+  tv.el.querySelector('#tvYt').href = watchUrl(v.id);
+  const body = tv.el.querySelector('#tvBody');
+  if (v.embeddable === false) notEmbeddable(body, v, 'The broadcaster doesn’t allow this stream to be embedded.');
+  else player(body, embedUrl(v.id));
+  if (ob?.tab === 'live') setObTab('live'); // onboard may have been showing this broadcast
+}
+
+function fillTvSessions() {
+  const sel = tv.el.querySelector('#tvSel');
+  const tag = (s) => (s.status === 'live' ? '● LIVE' : s.status === 'upcoming' ? statusText(s) : 'replay');
+  sel.innerHTML = streams.sessions.map((s) => `<option value="${s.id}" ${s.id === tv.video?.id ? 'selected' : ''}>${esc(tag(s))} · ${esc(s.title.replace(/^[^\w]*(LIVE|直播)\s*\|\s*/i, ''))}</option>`).join('');
+}
+
+function closeTv() {
+  tv?.el.remove();
+  tv = null;
+  if (ob?.tab === 'live') setObTab('live');
+}
+
 // ---------------------------------------------------------------- onboard window
 
-let ob = null; // { el, canvas, ctx, tab }
+let ob = null; // { el, canvas, ctx, tab, userTab }
 
 function openOnboard(id) {
   const c = carById(id);
   if (!c) return;
   selected = c.id;
+  const fresh = !ob;
   if (!ob) createOnboard();
   updateOnboardHeader();
+  // first open: real video if this car has one, otherwise the track view
+  if (fresh || !ob.userTab) {
+    const s = carStream(c);
+    ob.tab = s && (s.kind !== 'broadcast' || !tvShows(s.video)) ? 'live' : 'track';
+  }
   setObTab(ob.tab);
   drawTower();
 }
@@ -627,8 +766,9 @@ function createOnboard() {
       <button id="obClose" title="Close">✕</button>
     </div>
     <div class="ob-tabs">
-      <button data-tab="onboard" class="on">Onboard</button>
-      <button data-tab="stream">Live stream</button>
+      <button data-tab="live">Live</button>
+      <button data-tab="track">Track view</button>
+      <span class="ob-src" id="obSrc"></span>
     </div>
     <div class="ob-body" id="obBody"></div>
     <div class="ob-stats">
@@ -640,27 +780,13 @@ function createOnboard() {
   $('mapWrap').append(el);
   const canvas = document.createElement('canvas');
   canvas.width = 800; canvas.height = 450;
-  ob = { el, canvas, ctx: canvas.getContext('2d'), tab: 'onboard' };
+  ob = { el, canvas, ctx: canvas.getContext('2d'), tab: 'track', userTab: false };
 
   el.querySelector('#obClose').onclick = () => { el.remove(); ob = null; selected = null; drawTower(); };
   el.querySelector('#obPrev').onclick = () => stepCar(-1);
   el.querySelector('#obNext').onclick = () => stepCar(1);
-  el.querySelectorAll('.ob-tabs button').forEach((b) => { b.onclick = () => setObTab(b.dataset.tab); });
-
-  // drag by header
-  const head = el.querySelector('.ob-head');
-  head.addEventListener('pointerdown', (e) => {
-    if (e.target.tagName === 'BUTTON') return;
-    const r = el.getBoundingClientRect(), wrap = $('mapWrap').getBoundingClientRect();
-    const dx = e.clientX - r.left, dy = e.clientY - r.top;
-    head.setPointerCapture(e.pointerId);
-    const move = (m) => {
-      el.style.left = `${Math.max(0, Math.min(wrap.width - r.width, m.clientX - wrap.left - dx))}px`;
-      el.style.top = `${Math.max(0, Math.min(wrap.height - 40, m.clientY - wrap.top - dy))}px`;
-    };
-    head.addEventListener('pointermove', move);
-    head.addEventListener('pointerup', () => head.removeEventListener('pointermove', move), { once: true });
-  });
+  el.querySelectorAll('.ob-tabs button').forEach((b) => { b.onclick = () => { ob.userTab = true; setObTab(b.dataset.tab); }; });
+  draggable(el, el.querySelector('.ob-head'));
 }
 
 function stepCar(dir) {
@@ -675,21 +801,32 @@ function updateOnboardHeader() {
   ob.el.querySelector('#obCls').style.background = c.color;
   ob.el.querySelector('#obNum').textContent = `#${c.num}`;
   ob.el.querySelector('#obTitle').innerHTML = `${esc(c.make)} <small>· ${esc(c.team)} · ${esc(c.drivers.join(' / '))}</small>`;
-  if (ob.tab === 'stream') setObTab('stream');
 }
 
 const streamKey = (num) => `racehub:stream:${series.id}:${num}`;
 const seriesStreamKey = () => `racehub:stream:${series.id}`;
 const getStream = (num) => { try { return localStorage.getItem(streamKey(num)) || localStorage.getItem(seriesStreamKey()) || ''; } catch { return ''; } };
+const tvShows = (v) => !!(tv && v && tv.video?.id === v.id);
+
+/** Best video for a car: your own link › its onboard camera › the live race broadcast. */
+function carStream(c) {
+  const own = getStream(c.num);
+  if (own) return { kind: 'own', url: own };
+  const onboard = streams?.onboards.get(String(c.num));
+  if (onboard) return { kind: 'onboard', video: onboard };
+  const live = (tv?.video?.status === 'live' && tv.video) || (streams?.broadcast?.status === 'live' && streams.broadcast);
+  if (live) return { kind: 'broadcast', video: live };
+  return null;
+}
 
 function embedFor(url) {
   try {
     const u = new URL(url);
     const host = u.hostname.replace(/^www\./, '');
-    if (host === 'youtu.be') return { iframe: `https://www.youtube.com/embed/${u.pathname.slice(1)}?autoplay=1&mute=1` };
+    if (host === 'youtu.be') return { iframe: embedUrl(u.pathname.slice(1)) };
     if (host.endsWith('youtube.com')) {
       const id = u.searchParams.get('v') || u.pathname.split('/').filter(Boolean).pop();
-      return { iframe: `https://www.youtube.com/embed/${id}?autoplay=1&mute=1` };
+      return { iframe: embedUrl(id) };
     }
     if (host.endsWith('twitch.tv')) return { iframe: `https://player.twitch.tv/?channel=${u.pathname.split('/')[1]}&parent=${location.hostname}&muted=true` };
     if (/\.(mp4|webm|ogg)$/i.test(u.pathname)) return { video: url };
@@ -701,23 +838,66 @@ function setObTab(tab) {
   ob.tab = tab;
   ob.el.querySelectorAll('.ob-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
   const body = ob.el.querySelector('#obBody');
-  body.replaceChildren();
-  if (tab === 'onboard') { body.append(ob.canvas); return; }
+  const src = ob.el.querySelector('#obSrc');
+  if (tab === 'track') {
+    src.textContent = '';
+    if (body.firstChild !== ob.canvas) body.replaceChildren(ob.canvas);
+    return;
+  }
 
   const c = carById(selected);
-  const url = getStream(c.num);
-  const emb = url && embedFor(url);
-  if (emb) {
-    const node = emb.video ? Object.assign(document.createElement('video'), { src: emb.video, autoplay: true, muted: true, controls: true })
-      : Object.assign(document.createElement('iframe'), { src: emb.iframe, allow: 'autoplay; fullscreen', allowFullscreen: true });
-    body.append(node);
-    const edit = document.createElement('button');
-    edit.textContent = 'Change';
-    Object.assign(edit.style, { position: 'absolute', right: '6px', top: '6px', fontSize: '11px', background: '#000a', border: '1px solid #fff3', borderRadius: '4px', padding: '2px 6px' });
-    edit.onclick = () => streamForm(body, c, url);
-    body.append(edit);
+  const s = carStream(c);
+  const linkBtn = (label) => {
+    const b = document.createElement('button');
+    b.className = 'ob-link-btn';
+    b.textContent = label;
+    b.onclick = () => streamForm(body, c, getStream(c.num));
+    return b;
+  };
+
+  if (!s) {
+    src.textContent = '';
+    body.replaceChildren();
+    const d = document.createElement('div');
+    d.className = 'ob-note-full';
+    const b = streams?.broadcast;
+    d.innerHTML = `<p>No live camera for <b>#${esc(c.num)}</b> right now.</p>
+      <p class="sub">${!streams?.server ? 'Start the site with <code>npm start</code> to find official broadcasts and onboard streams.'
+        : b ? `Race broadcast: ${esc(b.status === 'upcoming' ? `starts ${statusText(b)}` : 'replay available')} — press 📺 in the header.`
+          : 'Public onboard cameras only exist when a series or team streams them (the Nürburgring 24h does).'}</p>`;
+    d.append(linkBtn('Paste a stream link for this car'));
+    body.append(d);
+    return;
+  }
+
+  if (s.kind === 'own') {
+    src.textContent = 'Your link';
+    const emb = embedFor(s.url);
+    if (emb) player(body, emb.video || emb.iframe, { video: !!emb.video });
+    if (!body.querySelector('.ob-link-btn')) body.append(linkBtn('Change'));
+    return;
+  }
+
+  if (s.kind === 'onboard') {
+    src.textContent = '● Onboard camera';
+    if (s.video.embeddable === false) notEmbeddable(body, s.video, `#${c.num}'s onboard stream can’t be embedded.`);
+    else player(body, embedUrl(s.video.id));
+    return;
+  }
+
+  // race broadcast as a stand-in
+  src.textContent = `No public onboard for #${c.num} · race broadcast`;
+  if (tvShows(s.video)) {
+    body.replaceChildren();
+    const d = document.createElement('div');
+    d.className = 'ob-note-full';
+    d.innerHTML = `<p>No public onboard camera for <b>#${esc(c.num)}</b>.</p><p class="sub">The race broadcast is playing in the TV window.</p>`;
+    d.append(linkBtn('Paste a stream link for this car'));
+    body.append(d);
+  } else if (s.video.embeddable === false) {
+    notEmbeddable(body, s.video, 'The race broadcast can’t be embedded.');
   } else {
-    streamForm(body, c, '');
+    player(body, embedUrl(s.video.id));
   }
 }
 
@@ -726,15 +906,18 @@ function streamForm(body, c, current) {
   const f = document.createElement('form');
   f.className = 'ob-stream-form';
   f.innerHTML = `
-    <p>Paste a stream link for <b>#${esc(c.num)}</b> — YouTube, Twitch, an .mp4, or any embeddable player URL.</p>
+    <p>Paste a stream link for <b>#${esc(c.num)}</b> — YouTube, Twitch, an .mp4, or any embeddable player URL. Leave empty to go back to the automatic stream.</p>
     <input name="url" placeholder="https://www.youtube.com/watch?v=…" value="${esc(current)}">
     <label><input type="checkbox" name="all"> <span style="font-size:12px;color:var(--muted)">Use for every car in ${series.short}</span></label>
     <button>Save &amp; play</button>`;
   f.onsubmit = (e) => {
     e.preventDefault();
     const url = f.url.value.trim();
-    try { localStorage.setItem(f.all.checked ? seriesStreamKey() : streamKey(c.num), url); } catch { /* ignore */ }
-    setObTab('stream');
+    try {
+      const key = f.all.checked ? seriesStreamKey() : streamKey(c.num);
+      if (url) localStorage.setItem(key, url); else localStorage.removeItem(key);
+    } catch { /* ignore */ }
+    setObTab('live');
   };
   body.append(f);
 }
@@ -748,7 +931,7 @@ function drawOnboard() {
   ob.el.querySelector('#obSpd').textContent = `${Math.round(model.speedKmh(c))}`;
   ob.el.querySelector('#obLast').textContent = fmtLap(c.lastLap);
   ob.el.querySelector('#obBest').textContent = fmtLap(c.bestLap);
-  if (ob.tab !== 'onboard') return;
+  if (ob.tab !== 'track') return;
 
   const { ctx, canvas } = ob;
   const W = canvas.width, H = canvas.height;
@@ -961,6 +1144,8 @@ async function init() {
   weather = new TrackWeather({ circuit: ev.circuit, location: ev.location });
   weather.addEventListener('update', onWeather);
   weather.start();
+  refreshStreams();
+  setInterval(refreshStreams, 2 * 60 * 1000);
   await useSimulation();
   requestAnimationFrame(frame);
   // For Al Kamel series, look for a live session and switch to it automatically.

@@ -2,7 +2,7 @@
 
 A pit-wall style dashboard for GT3 and endurance racing: what's live, what's on this weekend and next, the full season calendar — and a race view with a live track map, timing tower, onboard window and TV-style action popups.
 
-No build step, no backend, no API keys. Plain HTML + ES modules that talk straight to public data sources from the browser.
+No build step, no dependencies, no API keys. Plain HTML + ES modules, plus a tiny Node server for the one thing a browser can't do itself: finding YouTube broadcasts.
 
 ## Features
 
@@ -16,7 +16,8 @@ No build step, no backend, no API keys. Plain HTML + ES modules that talk straig
 - Track map with car markers in **team colour**, car number, and a **class-colour ring**
 - Corner numbers (T1, T2 …) and corner names (Eau Rouge, Mulsanne, Parabolica …) — toggle with the map button
 - Timing tower: overall and per class, gaps, last laps, pit status
-- Click a car → draggable **onboard window**: a driver's-eye view built from the real track geometry, plus a *Live stream* tab for any YouTube / Twitch / video link you paste
+- **Live broadcast**: the 📺 button finds the series' official YouTube stream for this event — live, upcoming (with start time) or replay — and plays it in a draggable TV window; it opens by itself when a session goes live
+- Click a car → **onboard window**: the car's real onboard stream when one is public (WEC, the Nürburgring 24h and some teams stream them), otherwise the race broadcast, or a link you paste; plus a *Track view* drawn from the real track geometry
 - Action popups: overtakes, battles, lead changes, pit stops, incidents, fastest laps, flags, race-control messages — each with an "Onboard" button; optional **auto-director**
 - **Yellow flags on the track**: flashing local yellows, amber full-course yellow / safety car, red flag
 - **Weather**: panel with air/track temperature, wind and a 2-hour rain outlook; damp and wet sections painted on the track; rain popups
@@ -27,13 +28,13 @@ When a session is running on [Al Kamel Systems](https://livetiming.alkamelsystem
 
 ## Run it
 
-Any static file server works — ES modules need `http://`, not `file://`.
+Needs Node 18+ (no packages to install).
 
 ```bash
-python -m http.server 5180
+npm start
 ```
 
-Then open <http://localhost:5180>.
+Then open <http://localhost:5180>. Any static server works too (`python -m http.server 5180`), but then the broadcast / onboard streams are off.
 
 ## Data sources
 
@@ -44,18 +45,21 @@ Then open <http://localhost:5180>.
 | Track outlines | [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits) GeoJSON; Al Kamel's own outline when live |
 | Corner names | Measured from OpenStreetMap named track sections, plus hand-placed entries |
 | Weather, forecasts, geocoding | [Open-Meteo](https://open-meteo.com) |
+| Broadcasts, onboard streams | Official series YouTube channels, read by `server.js` |
 
 Fetched data is cached in `localStorage` (schedules 12 h, standings 6 h, forecasts 3 h).
 
 ## Notes
 
 - Built for personal use. The Al Kamel feed is the public feed behind their live-timing website, not a documented API — it can change without notice.
+- Full race broadcasts depend on each series' streaming rights: SRO (GT World), IMSA, ELMS, Asian LMS, DTM, NLS, 24H Series and others stream races free on YouTube; WEC puts practice and onboards there, full races are on WEC TV. Some streams are geo-blocked.
 - Team colours are a best-effort lookup (liveries change every season); edit `js/liveries.js`.
 - Rain per track section comes from weather-model grid cells (~1–3 km), so it shows where rain is *likely*, not a sensor reading.
 
 ## Project layout
 
 ```
+server.js               dev server + YouTube stream lookup
 index.html, race.html   pages
 css/style.css           all styles
 js/home.js              race list page
@@ -70,4 +74,5 @@ js/tracks.js            track outlines + geometry
 js/corners.js           corner numbering + names
 js/weather.js           Open-Meteo weather, wet sections, forecasts
 js/liveries.js          team colours
+js/streams.js           series YouTube channels, matching broadcasts + onboards
 ```

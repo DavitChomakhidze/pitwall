@@ -1,0 +1,13 @@
+{
+  "name": "pitwall",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GT3 & endurance racing dashboard: calendars, live timing, track map, broadcasts",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
