@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Race View · Pitwall</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="race">
+  <header class="topbar race-head">
+    <a class="back" href="index.html">← All races</a>
+    <span class="badge" id="seriesBadge"></span>
+    <div>
+      <div class="race-title" id="raceTitle">Loading…</div>
+      <div class="race-sub" id="raceSub"></div>
+    </div>
+    <div class="race-clock">
+      <select id="source" class="source" title="Data source"></select>
+      <span class="flag" id="flag">GREEN</span>
+      <span id="clock">0:00:00</span>
+      <span class="race-sub" id="remaining"></span>
+      <label class="race-sub"><input type="checkbox" id="director"> Auto-director</label>
+      <div class="speed-ctl" id="speedCtl">
+        <button data-x="1" class="on">1×</button><button data-x="5">5×</button><button data-x="20">20×</button><button data-x="60">60×</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="race-main">
+    <aside class="tower">
+      <div class="tower-tabs" id="towerTabs"></div>
+      <div class="tower-list" id="towerList"></div>
+    </aside>
+    <div class="map-wrap" id="mapWrap">
+      <svg id="trackSvg"></svg>
+      <div class="map-legend" id="legend"></div>
+      <button class="map-tool" id="cornerBtn" title="Corner labels"></button>
+      <div class="wx" id="wx" hidden></div>
+      <div class="map-note" id="mapNote"></div>
+      <div class="map-banner" id="banner" hidden></div>
+      <div class="toasts" id="toasts"></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/race.js"></script>
+</body>
+</html>

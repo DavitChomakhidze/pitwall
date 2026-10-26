@@ -1,0 +1,14 @@
+# local editor / assistant settings
+.claude/
+.vscode/
+.idea/
+
+# OS clutter
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# if a build step or tooling is ever added
+node_modules/
+dist/
+*.log

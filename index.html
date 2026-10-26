@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pitwall</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="home">
+  <header class="topbar">
+    <a class="brand" href="index.html"><span class="brand-mark"></span>PITWALL</a>
+    <div class="year-switch">
+      <button id="prevYear" aria-label="Previous season">‹</button>
+      <span id="yearLabel"></span>
+      <button id="nextYear" aria-label="Next season">›</button>
+    </div>
+    <div class="sync">
+      <span id="syncStatus">Loading…</span>
+      <button id="refreshBtn" class="ghost">Refresh</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="filters">
+      <div class="chips" id="typeChips">
+        <button data-type="all" class="chip on">All</button>
+        <button data-type="gt3" class="chip">GT3</button>
+        <button data-type="endurance" class="chip">Endurance</button>
+      </div>
+      <div class="chips series-chips" id="seriesChips"></div>
+    </section>
+
+    <section class="block" id="liveBlock">
+      <h2><span class="live-dot"></span>Live now</h2>
+      <div class="cards" id="liveCards"></div>
+    </section>
+
+    <section class="block">
+      <h2>This weekend <small id="thisWLabel"></small></h2>
+      <div class="cards" id="thisCards"></div>
+    </section>
+
+    <section class="block">
+      <h2>Next weekend <small id="nextWLabel"></small></h2>
+      <div class="cards" id="nextCards"></div>
+    </section>
+
+    <section class="block">
+      <h2>Season calendar <small id="seasonCount"></small></h2>
+      <div id="calendar" class="calendar"></div>
+      <p class="source-note">Schedules are read live from each series' Wikipedia season page and refresh automatically every season.</p>
+      <p class="errors" id="errors"></p>
+    </section>
+  </main>
+
+  <script type="module" src="js/home.js"></script>
+</body>
+</html>
