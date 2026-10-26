@@ -73,27 +73,38 @@ function card(ev) {
 
 function fill(el, events, emptyText) {
   el.replaceChildren(...events.map(card));
-  if (!events.length) el.innerHTML = `<p class="empty">${emptyText}</p>`;
+  const noneSelected = shownSeries().every((s) => prefs.hidden.includes(s.id));
+  if (!events.length) el.innerHTML = `<p class="empty">${noneSelected ? 'No series selected — use <b>Select all</b> above.' : emptyText}</p>`;
 }
+
+const shownSeries = () => SERIES.filter((s) => prefs.type === 'all' || s.type === prefs.type);
+const setHidden = (ids) => { prefs.hidden = [...new Set(ids)]; savePrefs(); render(); };
 
 function renderChips() {
   const wrap = $('seriesChips');
-  wrap.replaceChildren(...SERIES.filter((s) => prefs.type === 'all' || s.type === prefs.type).map((s) => {
+  const shown = shownSeries();
+  const onCount = shown.filter((s) => !prefs.hidden.includes(s.id)).length;
+  wrap.replaceChildren(...shown.map((s) => {
     const b = document.createElement('button');
     b.className = `chip series ${prefs.hidden.includes(s.id) ? '' : 'on'}`;
     b.style.setProperty('--series', s.color);
     b.textContent = s.short;
-    b.title = s.name;
-    b.onclick = () => {
-      prefs.hidden = prefs.hidden.includes(s.id) ? prefs.hidden.filter((x) => x !== s.id) : [...prefs.hidden, s.id];
-      savePrefs();
-      render();
-    };
+    b.title = `${s.name} — double-click to show only this series`;
+    b.onclick = () => setHidden(prefs.hidden.includes(s.id) ? prefs.hidden.filter((x) => x !== s.id) : [...prefs.hidden, s.id]);
+    // two clicks toggle back to where they started, then this makes it the only one shown
+    b.ondblclick = () => setHidden(SERIES.filter((x) => x.id !== s.id).map((x) => x.id));
     if (data.errors[s.id]) b.classList.add('warn');
     return b;
   }));
+  $('selAll').disabled = onCount === shown.length;
+  $('selNone').disabled = onCount === 0;
+  $('selCount').textContent = `${onCount} of ${shown.length} series`;
   document.querySelectorAll('#typeChips .chip').forEach((b) => b.classList.toggle('on', b.dataset.type === prefs.type));
 }
+
+// select / clear only the series visible under the current GT3 / Endurance filter
+$('selAll').onclick = () => { const ids = shownSeries().map((s) => s.id); setHidden(prefs.hidden.filter((x) => !ids.includes(x))); };
+$('selNone').onclick = () => setHidden([...prefs.hidden, ...shownSeries().map((s) => s.id)]);
 
 function renderCalendar(events) {
   const cal = $('calendar');
