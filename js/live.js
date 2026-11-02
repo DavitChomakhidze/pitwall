@@ -11,7 +11,7 @@ const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 // Vehicle names: keep short tokens and model codes upper-case (BMW, AMG, GT3, ARX-06).
 const vehicleCase = (s) => (s || '').split(' ').map((w) => w.split('-').map((p) => (
   p.length <= 3 || /\d/.test(p) ? p.toUpperCase() : titleCase(p)
-)).join('-')).join(' ');
+)).join('-')).join(' ').replace(/\bMclaren\b/g, 'McLaren');
 
 const FLAGS = {
   GF: { text: 'GREEN', cls: '' },
@@ -47,6 +47,8 @@ export class LiveRace {
 
   /** True once there's enough data to draw the race. */
   get ready() { return !!(this.track && this.cars.length); }
+  get sourceName() { return 'Al Kamel live timing'; }
+  get posLabel() { return 'LIVE TRACK POS'; }
 
   info() { return this.client.one('session_info')?.info || {}; }
   status() { return this.client.one('session_status')?.status || {}; }

@@ -1,6 +1,6 @@
 import { SERIES, seriesById } from './series.js';
 import { loadYear, bucketEvents, eventStatus, fromISO } from './schedule.js';
-import { ALKAMEL_FEEDS, checkRunningFeeds } from './alkamel.js';
+import { liveSourceFor, checkRunningSources, sourceKey } from './sources.js';
 import { raceDayForecast } from './weather.js';
 
 const $ = (id) => document.getElementById(id);
@@ -16,8 +16,8 @@ let year = thisYear;
 let data = { events: [], errors: {} };
 // Near the end of a season, the next weekends can fall in January.
 let nextYearEvents = [];
-// seriesId → true while its Al Kamel timing feed is running
-let runningFeeds = {};
+// source key → true while that timing source is running
+let runningSources = {};
 
 const fmt = new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' });
 const fmtRange = (ev) => {
@@ -39,6 +39,15 @@ const visible = (ev) => {
   return true;
 };
 
+// What data the race view will have: real timing, or the simulation.
+function timingTag(s, ev, status) {
+  if (status === 'done') return '';
+  const src = liveSourceFor(s.id, ev);
+  if (!src) return '<span class="timing-pill sim" title="No live timing connected for this series: the map and tower are simulated">SIMULATED</span>';
+  const on = runningSources[sourceKey(src)];
+  return `<span class="timing-pill ${on ? 'on' : ''}" title="Real timing from ${src.name}">${on ? 'TIMING LIVE' : 'LIVE TIMING'}</span>`;
+}
+
 function card(ev) {
   const s = seriesById(ev.seriesId);
   const status = eventStatus(ev);
@@ -51,7 +60,7 @@ function card(ev) {
       <span class="badge">${s.short}</span>
       ${status === 'live' ? '<span class="live-pill">LIVE</span>' : ''}
       ${ev.isTest ? '<span class="test-pill">TEST</span>' : ''}
-      ${ALKAMEL_FEEDS[s.id] && status !== 'done' ? `<span class="timing-pill ${runningFeeds[s.id] ? 'on' : ''}">${runningFeeds[s.id] ? 'TIMING LIVE' : 'LIVE TIMING'}</span>` : ''}
+      ${timingTag(s, ev, status)}
       ${ev.round ? `<span class="round">Rd ${ev.round}</span>` : ''}
     </div>
     <div class="card-name">${esc(ev.name)}</div>
@@ -199,4 +208,4 @@ function esc(s) {
 }
 
 load();
-checkRunningFeeds().then((r) => { runningFeeds = r; render(); });
+checkRunningSources().then((r) => { runningSources = r; render(); });

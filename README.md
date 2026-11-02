@@ -23,8 +23,22 @@ No build step, no dependencies, no API keys. Plain HTML + ES modules, plus a tin
 - **Weather**: panel with air/track temperature, wind and a 2-hour rain outlook; damp and wet sections painted on the track; rain popups
 - **Championship standings** tab for every series
 
-**Live timing (WEC, ELMS, IMSA, Asian Le Mans)**
-When a session is running on [Al Kamel Systems](https://livetiming.alkamelsystems.com) live timing, the race view switches to it automatically: real car positions on the organiser's own track outline, real standings, flags, track-section yellows, race-control messages and weather station data. Recorded sessions can be picked from the source menu. Everything else falls back to a realistic simulation.
+**Live timing**
+
+Race pages show plainly what you're looking at: **LIVE DATA**, **RECORDED** or **SIMULATED**.
+
+| Series | Source | Car positions |
+|---|---|---|
+| WEC, ELMS, IMSA, Asian Le Mans | Al Kamel | Real x/y |
+| IGTC Indianapolis 8 Hour, GTWC America* | Al Kamel (`usac_sro`) | Real x/y |
+| Super Taikyu | supertaikyu.live | Estimated between timing points; no flags in the feed |
+| Everything else | Simulation | Simulated |
+
+*GTWC America's own rounds aren't confirmed on this feed yet.
+
+Not connected: Swiss Timing (GTWC Europe, and very likely DTM and GT Masters) and Super GT's feed refuse outside access; TSL (GTWC Asia, British GT, IGTC Suzuka), Time Service (24H Series) and wige (NLS) can't be tested until an event is live.
+
+When a session is running for the race on screen, the page switches to it automatically. Recorded sessions can be picked from the source menu.
 
 ## Run it
 
@@ -41,7 +55,7 @@ Then open <http://localhost:5180>. Any static server works too (`python -m http.
 | What | Source |
 |---|---|
 | Calendars, championship standings | Wikipedia season pages (MediaWiki API) |
-| Live timing, positions, flags, track temp | Al Kamel Systems public live-timing feed (Meteor DDP over WebSocket) |
+| Live timing, positions, flags, track temp | Al Kamel Systems public live-timing feed (Meteor DDP over WebSocket); Super Taikyu's public JSON files |
 | Track outlines | [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits) GeoJSON; Al Kamel's own outline when live |
 | Corner names | Measured from OpenStreetMap named track sections, plus hand-placed entries |
 | Weather, forecasts, geocoding | [Open-Meteo](https://open-meteo.com) |
@@ -51,7 +65,7 @@ Fetched data is cached in `localStorage` (schedules 12 h, standings 6 h, forecas
 
 ## Notes
 
-- Built for personal use. The Al Kamel feed is the public feed behind their live-timing website, not a documented API — it can change without notice.
+- Built for personal use. The timing feeds are the public ones behind each live-timing website, not documented APIs — they can change without notice.
 - Full race broadcasts depend on each series' streaming rights: SRO (GT World), IMSA, ELMS, Asian LMS, DTM, NLS, 24H Series and others stream races free on YouTube; WEC puts practice and onboards there, full races are on WEC TV. Some streams are geo-blocked.
 - Team colours are a best-effort lookup (liveries change every season); edit `js/liveries.js`.
 - Rain per track section comes from weather-model grid cells (~1–3 km), so it shows where rain is *likely*, not a sensor reading.
@@ -67,7 +81,9 @@ js/race.js              race view (map, tower, onboard, popups, weather, standin
 js/schedule.js          Wikipedia calendar loader + parser
 js/standings.js         Wikipedia standings parser
 js/series.js            series list, classes, Wikipedia page names
+js/sources.js           which real timing source a race can use
 js/alkamel.js           Al Kamel live-timing client (DDP)
+js/taikyu.js            Super Taikyu live timing
 js/live.js              live model: positions, gaps, events, yellow zones
 js/sim.js               race simulation (same interface as live.js)
 js/tracks.js            track outlines + geometry

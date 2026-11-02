@@ -2,8 +2,10 @@ import { seriesById } from './series.js';
 import { eventStatus, fromISO } from './schedule.js';
 import { loadTrack, sample } from './tracks.js';
 import { RaceSim, fmtLap, fmtClock } from './sim.js';
-import { AlKamelClient, ALKAMEL_FEEDS } from './alkamel.js';
+import { AlKamelClient } from './alkamel.js';
 import { LiveRace } from './live.js';
+import { TaikyuClient, TaikyuRace } from './taikyu.js';
+import { liveSourceFor } from './sources.js';
 import { cornerText, nextCorner } from './corners.js';
 import { TrackWeather } from './weather.js';
 import { loadStandings } from './standings.js';
@@ -24,7 +26,7 @@ const ev = {
   location: q.get('l') || '', start: q.get('a'), end: q.get('b'), round: q.get('r'),
 };
 const series = seriesById(ev.seriesId) || seriesById('wec');
-const feed = ALKAMEL_FEEDS[series.id];
+const source = liveSourceFor(series.id, ev);
 
 // `model` is either the RaceSim or a LiveRace — both expose the same interface.
 let model, track, view;
@@ -70,6 +72,7 @@ function setModel(m) {
   drawClock();
   $('speedCtl').hidden = m.isLive;
   $('source').classList.toggle('live', m.isLive);
+  drawDataPill();
   if (m.isLive && weather) {
     // replay race control history quietly so "declared wet" etc. is known
     weather.rc = { wet: false, spots: [] };
@@ -93,12 +96,26 @@ async function useSimulation() {
   setModel(simModel);
 }
 
-/** Connect to Al Kamel. sessionId = null follows the feed's current session. */
-function useLive(sessionId = null, { auto = false } = {}) {
+/** Show plainly whether the screen is real data. */
+function drawDataPill() {
+  const p = $('dataPill');
+  if (!model.isLive) { p.textContent = 'SIMULATED'; p.className = 'data-pill sim'; p.title = 'Made-up cars and timing, not the real race'; return; }
+  const s = model.status();
+  const running = s.isSessionRunning && !s.isFinished;
+  p.textContent = running ? 'LIVE DATA' : 'RECORDED';
+  p.className = `data-pill ${running ? 'live' : 'rec'}`;
+  p.title = model.positionsEstimated ? 'Real timing; dots estimated between timing points' : 'Real timing data';
+}
+
+/** Connect to the real timing source. sessionId = null follows the feed's current session. */
+async function useLive(sessionId = null, { auto = false } = {}) {
   if (client) client.close();
-  client = new AlKamelClient(feed, { sessionId });
-  const live = new LiveRace(client, series);
+  const taikyuTrack = source.kind === 'taikyu' ? await loadTrack(ev.circuit) : null;
+  client = source.kind === 'taikyu' ? new TaikyuClient() : new AlKamelClient(source.feed, { sessionId });
+  const live = source.kind === 'taikyu' ? new TaikyuRace(client, series, taikyuTrack) : new LiveRace(client, series);
+  const thisClient = client;
   live.on(toast);
+  const eventNow = !ev.start || !ev.end || eventStatus(ev) === 'live';
   let shown = false;
   let announced = false;
   client.addEventListener('change', () => {
@@ -111,17 +128,34 @@ function useLive(sessionId = null, { auto = false } = {}) {
         ['Later', hideBanner],
       ]);
     }
+    if (thisClient !== client) return;
+    // shared feed: wait for the session names, then use this series' own session
+    if (!shown && source.champ && !client.coll('events').size) return;
+    if (!shown && source.champ && !sessionId) {
+      const own = client.sessionList().filter((s) => source.champ.test(s.champ) && s.date <= Date.now());
+      if (own.length && !source.champ.test(client.one('session_info')?.info?.champName || '')) {
+        shown = true;
+        useLive(own[0].id, { auto });
+        return;
+      }
+    }
     if (!shown && live.ready && live.client.one('standings')) {
       shown = true;
-      // In auto mode only take over when the feed is actually running.
-      if (auto && !client.feedInfo?.running) { offerLatest(live); return; }
+      // Each round overwrites the Taikyu feed, so another round's data isn't this race.
+      if (client.matches && !client.matches(ev)) {
+        hideBanner();
+        if (!auto) { useSimulation(); showBanner('<span>No Super Taikyu data for this round: the timing site only keeps the latest one.</span>', [['OK', hideBanner]]); }
+        return;
+      }
+      // In auto mode only take over when this race is on and the feed is running.
+      if (auto && !(client.feedInfo?.running && eventNow)) { offerLatest(live); return; }
       hideBanner();
       setModel(live);
       $('source').value = sessionId || 'live';
     }
   });
   client.connect();
-  if (!auto) showBanner(`Connecting to Al Kamel live timing…`);
+  if (!auto) showBanner(`Connecting to ${source.name} live timing…`);
 }
 
 // ---------------------------------------------------------------- source picker
@@ -129,8 +163,8 @@ function useLive(sessionId = null, { auto = false } = {}) {
 function buildSourcePicker() {
   const sel = $('source');
   sel.innerHTML = '<option value="sim">Simulation</option>';
-  if (feed) {
-    sel.insertAdjacentHTML('beforeend', '<option value="live">Live timing · Al Kamel</option><optgroup label="Recorded sessions" id="sessGroup"></optgroup>');
+  if (source) {
+    sel.insertAdjacentHTML('beforeend', `<option value="live">Live timing · ${source.name}</option>${source.kind === 'alkamel' ? '<optgroup label="Recorded sessions" id="sessGroup"></optgroup>' : ''}`);
   }
   sel.onchange = () => {
     const v = sel.value;
@@ -147,7 +181,7 @@ function fillSessions() {
   sessionsKey = key;
   const fmt = (t) => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   $('sessGroup').innerHTML = list.slice(0, 40).map((s) => {
-    const champ = s.champ.replace(/^(IMSA WeatherTech SportsCar Championship|FIA World Endurance Championship)$/, '★ $1');
+    const champ = (source.champ ? source.champ.test(s.champ) : /^(IMSA WeatherTech SportsCar Championship|FIA World Endurance Championship)$/.test(s.champ)) ? `★ ${s.champ}` : s.champ;
     return `<option value="${s.id}">${fmt(s.date)} · ${esc(s.name)} — ${esc(champ || s.event)}</option>`;
   }).join('');
   if (client.pinnedSession) $('source').value = client.pinnedSession;
@@ -155,7 +189,7 @@ function fillSessions() {
 
 function offerLatest(live) {
   const label = live.label() || 'latest session';
-  showBanner(`<span>No live ${series.short} session on Al Kamel right now. Latest: <b>${esc(label)}</b> (${live.status().isFinished ? 'finished' : 'not running'}).</span>`, [
+  showBanner(`<span>No live ${series.short} timing for this race right now. Latest on ${source.name}: <b>${esc(label)}</b> (${live.status().isFinished ? 'finished' : 'not running'}).</span>`, [
     ['Show it', () => { hideBanner(); setModel(live); $('source').value = 'live'; }, true],
     ['Keep simulation', hideBanner],
   ]);
@@ -407,7 +441,9 @@ function carEl(c) {
 function updateNote() {
   if (model.isLive) {
     const noFix = model.cars.filter((c) => c.anchorP == null).length;
-    $('mapNote').textContent = `Al Kamel live timing · ${model.label()}${noFix ? ` · ${noFix} cars without position (pits / garage)` : ''}`;
+    const shape = track.real ? '' : ' · approximate track shape';
+    const est = model.positionsEstimated ? ' · dots estimated between timing points' : '';
+    $('mapNote').textContent = `${model.sourceName} · ${model.label()}${est}${shape}${noFix ? ` · ${noFix} cars without position (pits / garage)` : ''}`;
   } else {
     $('mapNote').textContent = `${track.real ? 'Real track outline' : 'Approximate track shape (circuit not in open track data)'} · Simulated timing`;
   }
@@ -559,6 +595,7 @@ function drawClock() {
   const f = model.flagInfo();
   $('flag').textContent = f.text;
   $('flag').className = `flag ${f.cls}`;
+  drawDataPill();
 }
 
 // ---------------------------------------------------------------- action popups
@@ -1100,7 +1137,7 @@ function drawOnboard() {
   ctx.fillStyle = '#ff3b30';
   ctx.beginPath(); ctx.arc(W - 18, 18, 5, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.textAlign = 'right';
-  ctx.fillText(model.isLive ? 'LIVE TRACK POS' : 'ONBOARD', W - 28, 23);
+  ctx.fillText(model.isLive ? model.posLabel : 'SIMULATED', W - 28, 23);
 }
 
 function quad(ctx, a, b, c2, d) {
@@ -1149,7 +1186,7 @@ async function init() {
   await useSimulation();
   requestAnimationFrame(frame);
   // For Al Kamel series, look for a live session and switch to it automatically.
-  if (feed) useLive(null, { auto: true });
+  if (source) useLive(null, { auto: true });
 }
 
 init();

@@ -5,7 +5,7 @@
 
 const HOST = 'livetiming.alkamelsystems.com';
 
-/** Pitwall series id → Al Kamel feed name. */
+/** Pitwall series id → Al Kamel feed name. SRO's shared US feed is in sources.js. */
 export const ALKAMEL_FEEDS = { wec: 'fiawec', elms: 'elms', imsa: 'imsa', alms: 'alms' };
 
 const SESSION_SUBS = [
@@ -169,11 +169,11 @@ function setPath(obj, path, value) {
   else o[keys[keys.length - 1]] = value;
 }
 
-/** One-shot check: which of our feeds are running right now. Resolves {seriesId: boolean}. */
+/** One-shot check: which feeds are running right now. Resolves {feedName: boolean}. */
 export function checkRunningFeeds(timeoutMs = 6000) {
   return new Promise((resolve) => {
     const result = {};
-    const byFeed = Object.fromEntries(Object.entries(ALKAMEL_FEEDS).map(([s, f]) => [f, s]));
+    const feeds = [...Object.values(ALKAMEL_FEEDS), 'usac_sro'];
     let ws;
     const done = () => { try { ws?.close(); } catch { /* ignore */ } resolve(result); };
     try {
@@ -187,10 +187,10 @@ export function checkRunningFeeds(timeoutMs = 6000) {
       if (d[0] !== 'a') return;
       for (const raw of JSON.parse(d.slice(1))) {
         const m = JSON.parse(raw);
-        if (m.msg === 'connected') Object.values(ALKAMEL_FEEDS).forEach((f, i) => send({ msg: 'sub', id: String(i + 1), name: 'livetimingFeed', params: [f] }));
-        if (m.msg === 'added' && m.collection === 'feeds' && byFeed[m.fields.name]) {
-          result[byFeed[m.fields.name]] = !!m.fields.running;
-          if (++n === Object.keys(ALKAMEL_FEEDS).length) done();
+        if (m.msg === 'connected') feeds.forEach((f, i) => send({ msg: 'sub', id: String(i + 1), name: 'livetimingFeed', params: [f] }));
+        if (m.msg === 'added' && m.collection === 'feeds' && feeds.includes(m.fields.name)) {
+          result[m.fields.name] = !!m.fields.running;
+          if (++n === feeds.length) done();
         }
       }
     };

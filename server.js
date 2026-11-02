@@ -96,6 +96,22 @@ async function embeddable(id) {
   return ok;
 }
 
+// ---------------------------------------------------------------- Super Taikyu timing
+
+const taikyuCache = new Map(); // file → { at, body }
+const TAIKYU_TTL = { updateinfo: 2000, livemoni: 2000, master: 60 * 1000 };
+
+/** The public JSON files behind supertaikyu.live/timings (they send no CORS headers). */
+async function taikyuFile(file) {
+  const hit = taikyuCache.get(file);
+  if (hit && Date.now() - hit.at < TAIKYU_TTL[file]) return hit.body;
+  const r = await fetch(`https://www.supertaikyu.live/json/${file}.json`, { headers: { 'User-Agent': YT_HEADERS['User-Agent'] } });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const body = await r.text();
+  taikyuCache.set(file, { at: Date.now(), body });
+  return body;
+}
+
 // ---------------------------------------------------------------- HTTP
 
 function send(res, code, body, type = 'application/json') {
@@ -110,6 +126,12 @@ const server = http.createServer(async (req, res) => {
     const ch = url.searchParams.get('channel') || '';
     if (!/^UC[\w-]{22}$/.test(ch)) return send(res, 400, { error: 'bad channel id' });
     try { return send(res, 200, await channelStreams(ch)); } catch (e) { return send(res, 502, { error: e.message }); }
+  }
+
+  if (url.pathname === '/api/taikyu') {
+    const file = url.searchParams.get('file');
+    if (!['updateinfo', 'master', 'livemoni'].includes(file)) return send(res, 400, { error: 'bad file' });
+    try { return send(res, 200, await taikyuFile(file)); } catch (e) { return send(res, 502, { error: e.message }); }
   }
 
   // static files, never outside ROOT
